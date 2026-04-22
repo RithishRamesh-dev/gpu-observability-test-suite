@@ -1,0 +1,86 @@
+# configs/workload_config.yaml
+# Central configuration for all GPU workloads
+
+global:
+  gpu_index: 0                  # Which GPU to target (0-indexed)
+  output_dir: reports/
+  log_level: INFO
+  telemetry_interval_sec: 1     # Collection frequency
+
+workloads:
+  llm_inference:
+    enabled: true
+    model: "meta-llama/Llama-2-7b-hf"   # Change to available model
+    # model: "facebook/opt-125m"          # Lightweight alternative for testing
+    max_model_len: 4096
+    dtype: "float16"
+    port: 8000
+    warmup_requests: 10
+    phases:
+      - name: "batch_sweep"
+        concurrency: [1, 4, 8, 16, 32, 64]
+        requests_per_concurrency: 20
+        input_tokens: 512
+        output_tokens: 128
+      - name: "sustained_load"
+        concurrency: 32
+        duration_sec: 600          # 10 minutes
+        input_tokens: 512
+        output_tokens: 256
+      - name: "burst_load"
+        concurrency: 128
+        duration_sec: 120
+        input_tokens: 256
+        output_tokens: 64
+      - name: "long_context"
+        concurrency: 4
+        duration_sec: 180
+        input_tokens: 3000
+        output_tokens: 512
+
+  cuda_matmul:
+    enabled: true
+    matrix_size: 8192              # NxN matrix dimension
+    dtype_fp16:
+      enabled: true
+      duration_sec: 300
+      use_tensor_cores: true
+    dtype_fp32:
+      enabled: true
+      duration_sec: 300
+      use_tensor_cores: false
+    dtype_bf16:
+      enabled: true
+      duration_sec: 180
+
+  memory_stress:
+    enabled: true
+    fill_percent: 90               # Fill to 90% of GPU VRAM
+    fragmentation:
+      enabled: true
+      alloc_size_mb: [64, 256, 1024]
+      cycles: 50
+    rapid_alloc:
+      enabled: true
+      duration_sec: 120
+      alloc_size_mb: 512
+
+  pcie_stress:
+    enabled: true
+    buffer_size_gb: 1
+    duration_sec: 300
+    direction: "both"              # h2d, d2h, both
+    async_transfers: true
+    num_streams: 4
+
+  thermal_stress:
+    enabled: true
+    duration_sec: 900              # 15 minutes sustained
+    target_power_percent: 100      # Target max TDP
+    monitor_throttle: true
+
+  warp_occupancy:
+    enabled: true
+    duration_sec: 180
+    block_size: 1024
+    shared_mem_per_block_kb: 48

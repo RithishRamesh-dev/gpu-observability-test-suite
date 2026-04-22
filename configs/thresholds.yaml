@@ -1,0 +1,281 @@
+# configs/thresholds.yaml
+# Pass/Fail thresholds for every validated metric.
+# Thresholds are per-phase: idle vs under_load.
+# tolerance: acceptable deviation (absolute or percent).
+
+metrics:
+
+  # ─── RELIABILITY / ECC ──────────────────────────────────────────
+  dbe_volatile:
+    description: "Double-Bit ECC Errors (volatile, reset on driver reload)"
+    dcgm_field: DCGM_FI_DEV_ECC_DBE_VOL_TOTAL
+    nvidia_smi_query: ecc.errors.uncorrected.volatile.total
+    idle:
+      expected: 0
+      max_allowed: 0
+    under_load:
+      must_be_monotonic: true
+      max_allowed: 0           # Any non-zero is a hardware concern
+    validation_type: "ecc_counter"
+
+  sbe_aggregate:
+    description: "Single-Bit ECC Errors (aggregate/lifetime)"
+    dcgm_field: DCGM_FI_DEV_ECC_SBE_AGG_TOTAL
+    nvidia_smi_query: ecc.errors.corrected.aggregate.total
+    idle:
+      expected_gte: 0
+    under_load:
+      must_be_monotonic: true
+    validation_type: "ecc_counter"
+
+  dbe_aggregate:
+    description: "Double-Bit ECC Errors (aggregate/lifetime)"
+    dcgm_field: DCGM_FI_DEV_ECC_DBE_AGG_TOTAL
+    nvidia_smi_query: ecc.errors.uncorrected.aggregate.total
+    idle:
+      expected_gte: 0
+    under_load:
+      must_be_monotonic: true
+    validation_type: "ecc_counter"
+
+  retired_pages_sbe:
+    description: "Retired pages due to SBE"
+    dcgm_field: DCGM_FI_DEV_RETIRED_SBE
+    nvidia_smi_query: retired_pages.single_bit_ecc.count
+    idle:
+      expected_gte: 0
+    under_load:
+      must_be_monotonic: true
+    validation_type: "ecc_counter"
+
+  retired_pages_dbe:
+    description: "Retired pages due to DBE"
+    dcgm_field: DCGM_FI_DEV_RETIRED_DBE
+    nvidia_smi_query: retired_pages.double_bit.count
+    idle:
+      expected_gte: 0
+    under_load:
+      must_be_monotonic: true
+    validation_type: "ecc_counter"
+
+  uncorrectable_ecc:
+    description: "Uncorrectable ECC Errors (aggregate)"
+    dcgm_field: DCGM_FI_DEV_ECC_DBE_AGG_TOTAL
+    idle:
+      expected: 0
+      max_allowed: 0
+    validation_type: "ecc_counter"
+
+  sbe_volatile_roc:
+    description: "Single-Bit Errors Volatile - Rate of Change"
+    dcgm_field: DCGM_FI_DEV_ECC_SBE_VOL_TOTAL
+    validation_type: "rate_of_change"
+    roc_window_sec: 60
+    expected_roc_idle: 0.0
+    max_roc_alert: 10.0          # errors/min triggers alert
+
+  # ─── PERFORMANCE ────────────────────────────────────────────────
+  gpu_occupancy:
+    description: "GPU SM Occupancy (%)"
+    dcgm_field: DCGM_FI_PROF_SM_OCCUPANCY
+    unit: "percent"
+    idle:
+      expected_lte: 10
+    under_load:
+      expected_gte: 60
+      warning_lt: 40
+    tolerance_pct: 5
+    validation_type: "utilization"
+
+  sm_activity:
+    description: "GPU Multiprocessor Activity (%)"
+    dcgm_field: DCGM_FI_PROF_SM_ACTIVE
+    unit: "percent"
+    idle:
+      expected_lte: 5
+    under_load:
+      expected_gte: 70
+    relationship:
+      metric: gpu_occupancy
+      rule: "sm_activity >= occupancy * 0.8"   # Activity should be >= 80% of occupancy
+    validation_type: "utilization"
+
+  tensor_core_utilization:
+    description: "Tensor Core Utilization (%)"
+    dcgm_field: DCGM_FI_PROF_PIPE_TENSOR_ACTIVE
+    unit: "percent"
+    idle:
+      expected_lte: 5
+    under_load:
+      expected_gte: 50            # During FP16 matmul workload
+      workload_filter: ["cuda_matmul_fp16", "llm_inference"]
+    validation_type: "utilization"
+
+  pipeline_tensor_active:
+    description: "Pipeline Tensor Active (%)"
+    dcgm_field: DCGM_FI_PROF_PIPE_TENSOR_ACTIVE
+    unit: "percent"
+    idle:
+      expected_lte: 5
+    under_load:
+      expected_gte: 40
+    validation_type: "utilization"
+
+  pipeline_fp_activity:
+    description: "Pipeline FP32 Activity (%)"
+    dcgm_field: DCGM_FI_PROF_PIPE_FP32_ACTIVE
+    unit: "percent"
+    idle:
+      expected_lte: 5
+    under_load:
+      expected_gte: 30
+      workload_filter: ["cuda_matmul_fp32"]
+    validation_type: "utilization"
+
+  memory_utilization:
+    description: "GPU Memory Bandwidth Utilization (%)"
+    dcgm_field: DCGM_FI_DEV_MEM_COPY_UTIL
+    nvidia_smi_query: utilization.memory
+    unit: "percent"
+    idle:
+      expected_lte: 10
+    under_load:
+      expected_gte: 70
+      workload_filter: ["memory_stress", "llm_inference"]
+    validation_type: "utilization"
+
+  # ─── THERMAL AND POWER ──────────────────────────────────────────
+  core_temperature:
+    description: "GPU Core Temperature (°C)"
+    dcgm_field: DCGM_FI_DEV_GPU_TEMP
+    nvidia_smi_query: temperature.gpu
+    unit: "celsius"
+    idle:
+      expected_lte: 50
+      expected_gte: 20
+    under_load:
+      expected_gte: 50
+      expected_lte: 87            # Default thermal throttle point for most NVIDIA GPUs
+      warning_gte: 80
+    validation_type: "threshold_range"
+
+  memory_temperature:
+    description: "GPU Memory Temperature (°C)"
+    dcgm_field: DCGM_FI_DEV_MEMORY_TEMP
+    nvidia_smi_query: temperature.memory
+    unit: "celsius"
+    idle:
+      expected_lte: 60
+    under_load:
+      expected_gte: 40
+      expected_lte: 95
+      warning_gte: 85
+    validation_type: "threshold_range"
+
+  power_usage:
+    description: "GPU Power Draw (W)"
+    dcgm_field: DCGM_FI_DEV_POWER_USAGE
+    nvidia_smi_query: power.draw
+    unit: "watts"
+    idle:
+      expected_lte_pct_tdp: 20
+    under_load:
+      expected_gte_pct_tdp: 70   # Should reach ≥70% of TDP under stress
+      warning_lt_pct_tdp: 50
+    validation_type: "power"
+
+  power_throttling:
+    description: "Power Throttle Reason Bitmask"
+    dcgm_field: DCGM_FI_DEV_POWER_VIOLATION
+    nvidia_smi_query: clocks_throttle_reasons.hw_power_brake_slowdown
+    idle:
+      expected: 0
+    under_load:
+      may_be_nonzero: true       # Expected under max stress
+    validation_type: "throttle_flag"
+
+  thermal_throttling:
+    description: "Thermal Throttle Reason Bitmask"
+    dcgm_field: DCGM_FI_DEV_THERMAL_VIOLATION
+    nvidia_smi_query: clocks_throttle_reasons.gpu_idle
+    idle:
+      expected: 0
+    under_load:
+      may_be_nonzero: true
+    validation_type: "throttle_flag"
+
+  temp_power_dynamics:
+    description: "Temperature and Power Time-Series Correlation"
+    metrics_pair: ["core_temperature", "power_usage"]
+    validation_type: "time_series_correlation"
+    expected_correlation_gte: 0.6   # Temp and power should positively correlate
+    ramp_detection: true             # Detect ramp-up and cooldown
+
+  # ─── MEMORY / CLOCKS ────────────────────────────────────────────
+  gpu_memory_used:
+    description: "GPU Memory Used (GB)"
+    dcgm_field: DCGM_FI_DEV_FB_USED
+    nvidia_smi_query: memory.used
+    unit: "gb"
+    idle:
+      expected_lte_pct_total: 20
+    under_load:
+      expected_gte_pct_total: 70
+      workload_filter: ["memory_stress", "llm_inference"]
+    tolerance_pct: 5
+    validation_type: "memory"
+
+  sm_clock:
+    description: "GPU SM Clock (MHz)"
+    dcgm_field: DCGM_FI_DEV_SM_CLOCK
+    nvidia_smi_query: clocks.current.sm
+    unit: "mhz"
+    idle:
+      expected_lte_pct_max: 60   # May boost-clock down at idle
+    under_load:
+      expected_gte_pct_max: 80   # Should be near max boost clock
+    validation_type: "clock"
+
+  # ─── INTERCONNECT ───────────────────────────────────────────────
+  pcie_throughput_tx:
+    description: "PCIe TX Throughput (MB/s)"
+    dcgm_field: DCGM_FI_PROF_PCIE_TX_BYTES
+    nvidia_smi_query: pcie.link.gen.current
+    unit: "mb_per_sec"
+    idle:
+      expected_lte: 100
+    under_load:
+      expected_gte: 5000         # ≥5 GB/s during PCIe stress
+      workload_filter: ["pcie_stress"]
+    validation_type: "throughput"
+
+  pcie_throughput_rx:
+    description: "PCIe RX Throughput (MB/s)"
+    dcgm_field: DCGM_FI_PROF_PCIE_RX_BYTES
+    unit: "mb_per_sec"
+    idle:
+      expected_lte: 100
+    under_load:
+      expected_gte: 5000
+      workload_filter: ["pcie_stress"]
+    validation_type: "throughput"
+
+  pcie_replay_counter:
+    description: "PCIe Replay Counter (Rate of Change)"
+    dcgm_field: DCGM_FI_DEV_PCIE_REPLAY_COUNTER
+    nvidia_smi_query: pcie.link.tx_util
+    validation_type: "rate_of_change"
+    roc_window_sec: 60
+    expected_roc_idle: 0.0
+    max_roc_warn: 1.0            # Replays/min - any is suspicious
+
+  nvlink_throughput:
+    description: "NVLink Interconnect Throughput (GB/s)"
+    dcgm_field: DCGM_FI_PROF_NVLINK_TX_BYTES
+    unit: "gb_per_sec"
+    idle:
+      expected_lte: 1
+    under_load:
+      expected_gte: 10           # Only relevant if NVLink present
+      skip_if_no_nvlink: true
+    validation_type: "throughput"

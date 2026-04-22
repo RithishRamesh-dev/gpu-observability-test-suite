@@ -1,0 +1,106 @@
+# dashboards/gpu_alerts.yml
+groups:
+  - name: gpu_reliability
+    interval: 30s
+    rules:
+      - alert: GPUDoubleBitECCError
+        expr: DCGM_FI_DEV_ECC_DBE_VOL_TOTAL > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "GPU {{ $labels.gpu }} double-bit ECC error detected"
+          description: "DBE count: {{ $value }}. Hardware may be faulty."
+
+      - alert: GPUHighSBERate
+        expr: rate(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL[5m]) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU {{ $labels.gpu }} high single-bit ECC error rate"
+          description: "Rate: {{ $value }} errors/sec over last 5 minutes."
+
+      - alert: GPURetiredPages
+        expr: DCGM_FI_DEV_RETIRED_DBE > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU {{ $labels.gpu }} has retired pages due to DBE"
+          description: "Retired pages: {{ $value }}"
+
+  - name: gpu_thermal_power
+    interval: 15s
+    rules:
+      - alert: GPUHighTemperature
+        expr: DCGM_FI_DEV_GPU_TEMP > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU {{ $labels.gpu }} temperature high: {{ $value }}°C"
+
+      - alert: GPUCriticalTemperature
+        expr: DCGM_FI_DEV_GPU_TEMP > 90
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "GPU {{ $labels.gpu }} critical temperature: {{ $value }}°C"
+
+      - alert: GPUMemoryTemperatureHigh
+        expr: DCGM_FI_DEV_MEMORY_TEMP > 90
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU {{ $labels.gpu }} HBM temperature high: {{ $value }}°C"
+
+      - alert: GPUPowerThrottling
+        expr: DCGM_FI_DEV_POWER_VIOLATION > 0
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "GPU {{ $labels.gpu }} is power throttling"
+
+      - alert: GPUThermalThrottling
+        expr: DCGM_FI_DEV_THERMAL_VIOLATION > 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU {{ $labels.gpu }} is thermal throttling"
+
+  - name: gpu_performance
+    interval: 30s
+    rules:
+      - alert: GPULowOccupancy
+        expr: DCGM_FI_PROF_SM_OCCUPANCY < 30 and DCGM_FI_DEV_GPU_UTIL > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU {{ $labels.gpu }} low occupancy despite high utilization"
+          description: "Occupancy: {{ $value }}%. May indicate memory-bound workload."
+
+      - alert: GPULowTensorCoreUtil
+        expr: DCGM_FI_PROF_PIPE_TENSOR_ACTIVE < 10 and DCGM_FI_DEV_GPU_UTIL > 70
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "GPU {{ $labels.gpu }} tensor cores underutilized"
+
+  - name: gpu_interconnect
+    interval: 30s
+    rules:
+      - alert: PCIeReplayCounter
+        expr: rate(DCGM_FI_DEV_PCIE_REPLAY_COUNTER[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU {{ $labels.gpu }} PCIe replay counter increasing"
+          description: "Rate: {{ $value }} replays/sec. May indicate PCIe link issues."

@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPU Observability Validation Report</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e;
+    --pass: #3fb950; --fail: #f85149; --warn: #d29922; --skip: #6e7681;
+    --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header .meta { color: var(--muted); font-size: 13px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; text-align: center; }
+  .card .value { font-size: 36px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .card .label { color: var(--muted); font-size: 13px; }
+  .card.pass .value { color: var(--pass); }
+  .card.fail .value { color: var(--fail); }
+  .card.warn .value { color: var(--warn); }
+  .card.skip .value { color: var(--skip); }
+  .overall { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 24px; margin-bottom: 32px; display: flex; align-items: center; gap: 12px; }
+  .overall .badge { padding: 4px 14px; border-radius: 20px; font-weight: 700; font-size: 14px; }
+  .badge.PASS { background: #1a3a1f; color: var(--pass); border: 1px solid var(--pass); }
+  .badge.FAIL { background: #3a1a1a; color: var(--fail); border: 1px solid var(--fail); }
+  .section { margin-bottom: 32px; }
+  .section h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  th { background: #1c2128; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 16px; text-align: left; }
+  td { padding: 10px 16px; border-top: 1px solid var(--border); }
+  tr:hover td { background: #1c2128; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
+  .status.PASS { color: var(--pass); }
+  .status.FAIL { color: var(--fail); }
+  .status.WARN { color: var(--warn); }
+  .status.SKIP { color: var(--skip); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .PASS .dot { background: var(--pass); }
+  .FAIL .dot { background: var(--fail); }
+  .WARN .dot { background: var(--warn); }
+  .SKIP .dot { background: var(--skip); }
+  .metric-name { font-family: 'Consolas', monospace; font-size: 13px; color: var(--accent); }
+  .mono { font-family: 'Consolas', monospace; font-size: 13px; }
+  .msg { color: var(--muted); font-size: 12px; max-width: 400px; }
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-family: monospace; background: #1c2128; border: 1px solid var(--border); }
+  footer { text-align: center; padding: 24px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); margin-top: 48px; }
+  .timeline { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 24px; margin-bottom: 32px; }
+  .timeline h3 { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
+  .workloads { display: flex; gap: 8px; flex-wrap: wrap; }
+  .wl { background: #1c2128; border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 12px; }
+  .wl .name { font-weight: 600; color: var(--accent); }
+  .wl .dur { color: var(--muted); margin-left: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🖥 GPU Observability Validation Report</h1>
+    <div class="meta">GPU: NVIDIA A100 SXM4 80GB · Driver 535.129.03 · CUDA 12.2</div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:13px;font-weight:600">2024-01-15 11:47:32 UTC</div>
+    <div class="meta">Run duration: 47m 18s</div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Summary cards -->
+  <div class="summary-grid">
+    <div class="card pass">
+      <div class="value">18</div>
+      <div class="label">PASS</div>
+    </div>
+    <div class="card fail">
+      <div class="value">2</div>
+      <div class="label">FAIL</div>
+    </div>
+    <div class="card warn">
+      <div class="value">1</div>
+      <div class="label">WARN</div>
+    </div>
+    <div class="card skip">
+      <div class="value">2</div>
+      <div class="label">SKIP</div>
+    </div>
+  </div>
+
+  <!-- Overall status -->
+  <div class="overall">
+    <span class="badge FAIL">FAIL</span>
+    <span style="color:var(--muted)">2 metrics failed validation thresholds. Review ECC and PCIe replay counters.</span>
+  </div>
+
+  <!-- Workload timeline -->
+  <div class="timeline">
+    <h3>Workload Timeline</h3>
+    <div class="workloads">
+      <div class="wl"><span class="name">idle_baseline</span><span class="dur">0:00 – 2:00 (2m)</span></div>
+      <div class="wl"><span class="name">cuda_matmul_fp16</span><span class="dur">2:30 – 12:30 (10m)</span></div>
+      <div class="wl"><span class="name">memory_stress</span><span class="dur">13:00 – 23:00 (10m)</span></div>
+      <div class="wl"><span class="name">pcie_stress</span><span class="dur">23:30 – 33:30 (10m)</span></div>
+      <div class="wl"><span class="name">thermal_stress</span><span class="dur">34:00 – 44:00 (10m)</span></div>
+      <div class="wl"><span class="name">llm_inference</span><span class="dur">44:30 – 47:18 (2m48s)</span></div>
+    </div>
+  </div>
+
+  <!-- Reliability / ECC -->
+  <div class="section">
+    <h2>Reliability / ECC</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th><th>Status</th><th>Idle</th><th>Load</th><th>Threshold</th><th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="metric-name">ecc_dbe_volatile</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">0</td><td class="mono">0</td>
+          <td class="chip">max=0</td>
+          <td class="msg">No double-bit errors detected</td>
+        </tr>
+        <tr>
+          <td class="metric-name">ecc_sbe_volatile</td>
+          <td><span class="status FAIL"><span class="dot"></span>FAIL</span></td>
+          <td class="mono">0</td><td class="mono">3</td>
+          <td class="chip">max=0</td>
+          <td class="msg">⚠ 3 single-bit errors detected during memory_stress workload. Monotonic. Counter non-zero exceeds max_allowed=0.</td>
+        </tr>
+        <tr>
+          <td class="metric-name">ecc_sbe_aggregate</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">3</td><td class="mono">3</td>
+          <td class="chip">monotonic</td>
+          <td class="msg">Aggregate counter monotonically non-decreasing ✓</td>
+        </tr>
+        <tr>
+          <td class="metric-name">ecc_dbe_aggregate</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">0</td><td class="mono">0</td>
+          <td class="chip">max=0</td>
+          <td class="msg">No lifetime DBE errors</td>
+        </tr>
+        <tr>
+          <td class="metric-name">retired_pages_sbe</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">0</td><td class="mono">0</td>
+          <td class="chip">max=0</td>
+          <td class="msg">No retired pages</td>
+        </tr>
+        <tr>
+          <td class="metric-name">retired_pages_dbe</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">0</td><td class="mono">0</td>
+          <td class="chip">max=0</td>
+          <td class="msg">No retired pages</td>
+        </tr>
+        <tr>
+          <td class="metric-name">ecc_sbe_volatile_roc</td>
+          <td><span class="status WARN"><span class="dot"></span>WARN</span></td>
+          <td class="mono">0/s</td><td class="mono">0.05/s</td>
+          <td class="chip">max=0.5/s</td>
+          <td class="msg">Rate within threshold. Monitor over extended run.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Performance -->
+  <div class="section">
+    <h2>Performance</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th><th>Status</th><th>Idle</th><th>Load (p50/p95)</th><th>Threshold</th><th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="metric-name">gpu_occupancy</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">1.8%</td><td class="mono">82.4% / 87.1%</td>
+          <td class="chip">idle&lt;10%, load&gt;60%</td>
+          <td class="msg">Occupancy well above threshold during matmul workload</td>
+        </tr>
+        <tr>
+          <td class="metric-name">sm_activity</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">2.1%</td><td class="mono">89.3% / 93.5%</td>
+          <td class="chip">load&gt;60%</td>
+          <td class="msg">SM activity tracking occupancy with expected offset</td>
+        </tr>
+        <tr>
+          <td class="metric-name">tensor_core_utilization</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">0.3%</td><td class="mono">71.8% / 79.2%</td>
+          <td class="chip">load&gt;50%</td>
+          <td class="msg">Tensor cores highly active during FP16 matmul</td>
+        </tr>
+        <tr>
+          <td class="metric-name">pipeline_tensor_active</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">0.1%</td><td class="mono">68.4% / 75.9%</td>
+          <td class="chip">load&gt;40%</td>
+          <td class="msg">Pipeline tensor active aligns with tensor core utilization</td>
+        </tr>
+        <tr>
+          <td class="metric-name">pipeline_fp_activity</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">0.4%</td><td class="mono">77.2% / 83.1%</td>
+          <td class="chip">load&gt;50%</td>
+          <td class="msg">FP pipeline activity normal</td>
+        </tr>
+        <tr>
+          <td class="metric-name">memory_utilization</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">3.2%</td><td class="mono">74.6% / 81.3%</td>
+          <td class="chip">load&gt;50%</td>
+          <td class="msg">HBM memory bus highly utilized during memory_stress</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Thermal and Power -->
+  <div class="section">
+    <h2>Thermal and Power</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th><th>Status</th><th>Idle</th><th>Load (p50/p95)</th><th>Threshold</th><th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="metric-name">core_temperature</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">34°C</td><td class="mono">71°C / 76°C</td>
+          <td class="chip">30–87°C</td>
+          <td class="msg">Temperature within safe operating range</td>
+        </tr>
+        <tr>
+          <td class="metric-name">memory_temperature</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">28°C</td><td class="mono">63°C / 68°C</td>
+          <td class="chip">25–85°C</td>
+          <td class="msg">HBM temperature normal</td>
+        </tr>
+        <tr>
+          <td class="metric-name">power_usage</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">28W (7%)</td><td class="mono">347W (87%)</td>
+          <td class="chip">&gt;70% TDP</td>
+          <td class="msg">Power draw at 87% TDP during thermal stress ✓</td>
+        </tr>
+        <tr>
+          <td class="metric-name">power_throttling</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">false</td><td class="mono">false</td>
+          <td class="chip">false@idle</td>
+          <td class="msg">No power throttling detected (expected: VM power cap allows full TDP)</td>
+        </tr>
+        <tr>
+          <td class="metric-name">thermal_throttling</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">false</td><td class="mono">false</td>
+          <td class="chip">false@idle</td>
+          <td class="msg">No thermal throttling. GPU stayed below 76°C.</td>
+        </tr>
+        <tr>
+          <td class="metric-name">temp_power_dynamics</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td colspan="2" class="mono">Pearson r=0.94</td>
+          <td class="chip">r&gt;0.70</td>
+          <td class="msg">Strong positive correlation between power and temperature ✓</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Memory / Clocks -->
+  <div class="section">
+    <h2>Memory / Clocks</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th><th>Status</th><th>Idle</th><th>Load (p50/p95)</th><th>Threshold</th><th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="metric-name">gpu_memory_used</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">0.5 GB</td><td class="mono">71.4 GB / 76.2 GB</td>
+          <td class="chip">&gt;70% VRAM</td>
+          <td class="msg">Memory filled to 89% during memory_stress ✓</td>
+        </tr>
+        <tr>
+          <td class="metric-name">gpu_sm_clock</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">210 MHz</td><td class="mono">1,695 MHz / 1,740 MHz</td>
+          <td class="chip">&gt;80% max (1,980 MHz)</td>
+          <td class="msg">SM clock at 85.6% of boost clock under load ✓</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Interconnect -->
+  <div class="section">
+    <h2>Interconnect</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th><th>Status</th><th>Idle</th><th>Load (p50/p95)</th><th>Threshold</th><th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="metric-name">pcie_throughput_tx</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">85 MB/s</td><td class="mono">11,240 MB/s / 12,800 MB/s</td>
+          <td class="chip">&gt;5,000 MB/s</td>
+          <td class="msg">PCIe Gen4 x16: theoretical 32 GB/s. Achieved 40% in H2D+D2H ✓</td>
+        </tr>
+        <tr>
+          <td class="metric-name">pcie_throughput_rx</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">62 MB/s</td><td class="mono">10,980 MB/s / 12,500 MB/s</td>
+          <td class="chip">&gt;5,000 MB/s</td>
+          <td class="msg">PCIe RX throughput normal under D2H transfer test</td>
+        </tr>
+        <tr>
+          <td class="metric-name">pcie_replay_counter</td>
+          <td><span class="status FAIL"><span class="dot"></span>FAIL</span></td>
+          <td class="mono">0</td><td class="mono">7 (RoC: 0.7/s)</td>
+          <td class="chip">RoC &lt; 0.1/s</td>
+          <td class="msg">⚠ PCIe replay counter increased during transfer test. Rate 0.7/s exceeds 0.1/s threshold. Check PCIe slot, cable, or VM PCIe passthrough config.</td>
+        </tr>
+        <tr>
+          <td class="metric-name">nvlink_throughput</td>
+          <td><span class="status SKIP"><span class="dot"></span>SKIP</span></td>
+          <td class="mono">N/A</td><td class="mono">N/A</td>
+          <td class="chip">N/A</td>
+          <td class="msg">NVLink not present on this GPU/VM configuration</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Dashboard Comparison -->
+  <div class="section">
+    <h2>Dashboard Comparison (Prometheus vs Ground Truth)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th><th>Status</th><th>GT Mean</th><th>Prom Mean</th><th>Delta</th><th>GT P95</th><th>Prom P95</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="metric-name">gpu_utilization</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">85.2</td><td class="mono">84.8</td><td class="mono">0.5%</td>
+          <td class="mono">91.0</td><td class="mono">90.4</td>
+        </tr>
+        <tr>
+          <td class="metric-name">sm_occupancy</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">82.4</td><td class="mono">82.1</td><td class="mono">0.4%</td>
+          <td class="mono">87.1</td><td class="mono">86.9</td>
+        </tr>
+        <tr>
+          <td class="metric-name">tensor_core_util</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">71.8</td><td class="mono">70.9</td><td class="mono">1.3%</td>
+          <td class="mono">79.2</td><td class="mono">78.4</td>
+        </tr>
+        <tr>
+          <td class="metric-name">gpu_temp_c</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">71.0</td><td class="mono">71.0</td><td class="mono">0.0%</td>
+          <td class="mono">76.0</td><td class="mono">76.0</td>
+        </tr>
+        <tr>
+          <td class="metric-name">power_draw_w</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">347.2</td><td class="mono">345.8</td><td class="mono">0.4%</td>
+          <td class="mono">352.0</td><td class="mono">351.0</td>
+        </tr>
+        <tr>
+          <td class="metric-name">memory_used_mb</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">72,941</td><td class="mono">72,940</td><td class="mono">0.0%</td>
+          <td class="mono">77,414</td><td class="mono">77,414</td>
+        </tr>
+        <tr>
+          <td class="metric-name">pcie_tx_mb</td>
+          <td><span class="status PASS"><span class="dot"></span>PASS</span></td>
+          <td class="mono">11,240</td><td class="mono">11,180</td><td class="mono">0.5%</td>
+          <td class="mono">12,800</td><td class="mono">12,740</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px;color:var(--muted);font-size:12px">All Prometheus dashboard values within ±5% tolerance of ground-truth telemetry. Dashboard accurately reflects GPU state.</p>
+  </div>
+
+  <!-- System Info -->
+  <div class="section">
+    <h2>System Information</h2>
+    <table>
+      <thead><tr><th>Property</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>GPU Model</td><td class="mono">NVIDIA A100 SXM4 80GB</td></tr>
+        <tr><td>GPU UUID</td><td class="mono">GPU-f3e2a1b0-4c5d-6e7f-8a9b-0c1d2e3f4a5b</td></tr>
+        <tr><td>Driver Version</td><td class="mono">535.129.03</td></tr>
+        <tr><td>CUDA Version</td><td class="mono">12.2</td></tr>
+        <tr><td>VRAM Total</td><td class="mono">80 GB (81,920 MiB)</td></tr>
+        <tr><td>TDP / Power Limit</td><td class="mono">400W</td></tr>
+        <tr><td>Max SM Clock</td><td class="mono">1,980 MHz</td></tr>
+        <tr><td>PCIe Generation</td><td class="mono">Gen 4 x16</td></tr>
+        <tr><td>NVLink</td><td class="mono">Not present (VM passthrough)</td></tr>
+        <tr><td>ECC Mode</td><td class="mono">Enabled</td></tr>
+        <tr><td>DCGM Version</td><td class="mono">3.3.0</td></tr>
+        <tr><td>Host OS</td><td class="mono">Ubuntu 22.04 LTS (Kernel 5.15.0-92-generic)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Recommendations -->
+  <div class="section">
+    <h2>Recommendations</h2>
+    <table>
+      <thead><tr><th>Priority</th><th>Finding</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span style="color:var(--fail);font-weight:600">HIGH</span></td>
+          <td>ecc_sbe_volatile: 3 SBEs during memory_stress</td>
+          <td>Run <span class="chip">nvidia-smi --query-retired-pages</span>. If pages are being retired, contact cloud provider. Monitor over next 24h.</td>
+        </tr>
+        <tr>
+          <td><span style="color:var(--fail);font-weight:600">HIGH</span></td>
+          <td>PCIe replay counter rate: 0.7/s during transfer test</td>
+          <td>Check VM PCIe passthrough configuration. Verify IOMMU settings. Test with <span class="chip">nvidia-smi -q -d PCIE</span> before and after workload.</td>
+        </tr>
+        <tr>
+          <td><span style="color:var(--warn);font-weight:600">MEDIUM</span></td>
+          <td>ecc_sbe_volatile_roc within threshold but non-zero</td>
+          <td>Re-run memory_stress for 30+ minutes to confirm rate is stable. SBE rate should remain &lt; 0.5/s.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<footer>
+  Generated by gpu-observability-framework v1.0.0 · 
+  <a href="https://github.com/your-org/gpu-observability" style="color:var(--accent)">GitHub</a>
+</footer>
+
+</body>
+</html>
