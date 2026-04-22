@@ -76,17 +76,7 @@ RUN if [ "$INSTALL_VLLM" = "true" ]; then \
 # ── Smoke-test: verify all project packages are importable ──────────────────
 # Catches missing __init__.py or broken imports at build time rather than
 # at test runtime.
-RUN python3 -c "
-import sys
-sys.path.insert(0, '/workspace')
-from collectors.dcgm_collector import TelemetryCollector
-from validators.run_validators import run_all_validators
-from workload.cuda.matmul_stress import matmul_fp16_stress
-from workload.memory.memory_stress import fill_memory_stress
-from workload.pcie.pcie_stress import pcie_stress
-from workload.thermal.thermal_stress import max_compute_stress
-print('All project imports OK')
-"
+RUN python3 -c "import sys; sys.path.insert(0,'/workspace');     from collectors.dcgm_collector import TelemetryCollector;     from validators.run_validators import run_all_validators;     from workload.cuda.matmul_stress import matmul_fp16_stress;     from workload.memory.memory_stress import fill_memory_stress;     from workload.pcie.pcie_stress import pcie_stress;     from workload.thermal.thermal_stress import max_compute_stress;     print('All project imports OK')"
 
 # ── Environment ────────────────────────────────────────────────────────────────
 ENV PYTHONPATH=/workspace
