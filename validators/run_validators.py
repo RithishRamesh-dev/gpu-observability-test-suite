@@ -151,6 +151,17 @@ def validate_utilization(metric_name: str, config: Dict, data: TelemetryData) ->
     }
     field_name = field_map.get(field, metric_name)
 
+    # When DCGM is unavailable, fall back to equivalent nvidia-smi fields
+    SMI_FALLBACK = {
+        "sm_occupancy":       "utilization.gpu",
+        "sm_active":          "utilization.gpu",
+        "pipe_tensor_active": "utilization.gpu",
+        "pipe_fp32_active":   "utilization.gpu",
+        "mem_copy_util":      "utilization.memory",
+    }
+    if not data.get_all_values(field_name) and field_name in SMI_FALLBACK:
+        field_name = SMI_FALLBACK[field_name]
+
     idle_vals = data.get_idle_values(field_name)
     all_vals = data.get_all_values(field_name)
 
@@ -344,6 +355,14 @@ def validate_threshold_range(metric_name: str, config: Dict, data: TelemetryData
     field = config.get("dcgm_field") or config.get("nvidia_smi_query", metric_name)
     field_name = field_map.get(field, metric_name.replace(".", "_"))
 
+    # When DCGM is unavailable, fall back to nvidia-smi temperature fields
+    TEMP_SMI_FALLBACK = {
+        "gpu_temp": "temperature.gpu",
+        "mem_temp": "temperature.memory",
+    }
+    if not data.get_all_values(field_name) and field_name in TEMP_SMI_FALLBACK:
+        field_name = TEMP_SMI_FALLBACK[field_name]
+
     idle_vals = data.get_idle_values(field_name)
     all_vals = data.get_all_values(field_name)
 
@@ -535,6 +554,18 @@ def validate_throughput(metric_name: str, config: Dict, data: TelemetryData) -> 
         "DCGM_FI_PROF_NVLINK_RX_BYTES": "nvlink_rx",
     }
     field_name = field_map.get(config.get("dcgm_field", ""), metric_name)
+
+    # When DCGM is unavailable, pcie_tx_bytes/pcie_rx_bytes won't exist.
+    # nvidia-smi does not expose per-second byte counters, so skip gracefully.
+    if not data.get_all_values(field_name) and field_name in ("pcie_tx_bytes", "pcie_rx_bytes"):
+        result = ValidationResult(
+            metric_name=metric_name,
+            description=config.get("description", metric_name),
+            status=Status.SKIP,
+            details="PCIe byte counters require DCGM (not available via nvidia-smi). "
+                    "Install datacenter-gpu-manager for this metric.",
+        )
+        return result
     vals = data.get_all_values(field_name)
 
     result = ValidationResult(
