@@ -1,0 +1,134 @@
+version: "3.8"
+
+# docker-compose.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Starts the full GPU observability stack:
+#
+#   test-runner    — runs pytest against a live GPU (this is what you run)
+#   dcgm-exporter  — exposes DCGM metrics on :9400 for Prometheus
+#   prometheus     — scrapes dcgm-exporter, stores time-series
+#   grafana        — dashboard at http://localhost:3000
+#   node-exporter  — host CPU/memory/disk metrics
+#
+# Quick start:
+#   docker compose run --rm test-runner
+#
+# Start monitoring stack only (no tests):
+#   docker compose up dcgm-exporter prometheus grafana -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Test runner ──────────────────────────────────────────────────────────────
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_VLLM: ${INSTALL_VLLM:-false}
+    image: gpu-obs:latest
+    container_name: gpu-obs-tests
+    # Pass the whole GPU into the container
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # nvidia-smi needs these capabilities
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      - TEST_GPU_INDEX=${TEST_GPU_INDEX:-0}
+      - VLLM_MODEL=${VLLM_MODEL:-facebook/opt-125m}
+      - COLLECTOR_INTERVAL=${COLLECTOR_INTERVAL:-1.0}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Reports written inside the container land on the host
+      - ./reports:/workspace/reports
+    # Don't restart automatically; exit when tests finish
+    restart: "no"
+    # Default command: run everything. Override on the CLI.
+    command: >
+      tests/test_live_workloads.py
+      tests/test_all_metrics.py
+      -v --tb=short
+
+  # ── DCGM Exporter ────────────────────────────────────────────────────────────
+  dcgm-exporter:
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:3.3.0-3.2.0-ubuntu22.04
+    container_name: dcgm-exporter
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    cap_add:
+      - SYS_ADMIN
+    ports:
+      - "9400:9400"
+    environment:
+      - DCGM_EXPORTER_LISTEN=:9400
+      - DCGM_EXPORTER_KUBERNETES=false
+    restart: unless-stopped
+
+  # ── Prometheus ───────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./dashboards/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./dashboards/gpu_alerts.yml:/etc/prometheus/gpu_alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-admin-api"
+    restart: unless-stopped
+    depends_on:
+      - dcgm-exporter
+
+  # ── Grafana ──────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/gpu_observability.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./dashboards/grafana_provisioning:/etc/grafana/provisioning:ro
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # ── Node Exporter ─────────────────────────────────────────────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:
