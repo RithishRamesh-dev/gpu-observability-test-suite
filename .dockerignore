@@ -1,0 +1,42 @@
+# .dockerignore
+# Excludes files that must not be sent to the Docker build daemon.
+# This makes builds faster and prevents stale output from being baked in.
+
+# Previous test output — never copy into the image
+reports/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# HuggingFace model cache — large, should be mounted at runtime
+.cache/
+
+# Existing runbooks (docs only, not needed at runtime)
+*.md
+
+# Any stray directories with odd names
+{*
